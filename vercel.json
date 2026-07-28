@@ -1,8 +1,5 @@
 {
   "version": 2,
-  "public": true,
-  "buildCommand": "echo 'No build needed'",
-  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/v1/(.*)",
@@ -13,8 +10,8 @@
       "destination": "/api/index.ts"
     },
     {
-      "source": "/(.*)",
-      "destination": "/public/index.html"
+      "source": "/",
+      "destination": "/index.html"
     }
   ]
 }
