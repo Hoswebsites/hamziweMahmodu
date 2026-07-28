@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
+import fetch from 'node-fetch';
 
 // ============================================
 // 🔐 Hardcoded Configuration
