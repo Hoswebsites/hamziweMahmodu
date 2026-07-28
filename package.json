@@ -1,0 +1,30 @@
+{
+  "name": "hostools-api",
+  "version": "2.0.0",
+  "description": "OpenAI Compatible API for Video and Image Generation with Firebase & Supabase",
+  "main": "api/index.ts",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc"
+  },
+  "keywords": [
+    "openai",
+    "api",
+    "video",
+    "image",
+    "generation",
+    "vercel",
+    "firebase",
+    "supabase"
+  ],
+  "author": "HostTools",
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/node": "^3.0.0",
+    "firebase-admin": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
