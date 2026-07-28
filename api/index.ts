@@ -268,7 +268,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ status: 'healthy', version: CONFIG.APP.VERSION });
     }
 
-    return res.status(404).json({ error: { message: 'Endpoint not found' } });
+    // Default response for root or any other path
+    return res.status(200).json({
+      name: "HostTools API",
+      version: CONFIG.APP.VERSION,
+      status: 'active',
+      endpoints: {
+        GET: ['/api/health', '/v1/models'],
+        POST: ['/v1/chat/completions', '/v1/videos/generations', '/v1/images/generations']
+      },
+      auth: 'Bearer YOUR_API_KEY',
+      compatible: 'OpenAI API'
+    });
   } catch (error) {
     return res.status(500).json({ error: { message: 'Internal server error' } });
   }
