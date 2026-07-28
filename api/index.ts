@@ -2,7 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
 // ============================================
-// 🔐 Hardcoded Configuration (No .env required for Vercel)
+// 🔐 Hardcoded Configuration
 // ============================================
 
 const CONFIG = {
@@ -20,7 +20,7 @@ MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7Xx8...
   },
   APP: {
     BASE_URL: "https://hostools.vercel.app",
-    VERSION: "2.1.0"
+    VERSION: "2.1.1"
   },
   MODELS: {
     VIDEO: 'kling-v3-omni',
@@ -42,37 +42,11 @@ if (!admin.apps.length) {
       databaseURL: CONFIG.FIREBASE.databaseURL
     });
     db = admin.database();
-    console.log('✅ Firebase initialized with hardcoded config');
   } catch (error) {
     console.error('❌ Firebase init error:', error);
   }
-} else {
-  db = admin.database();
 }
-
-// ============================================
-// 📝 Type Definitions
-// ============================================
-
-interface ApiKey {
-  id: string;
-  name: string;
-  type: 'sk_' | 'pk_';
-  balance: number;
-  status: 'active' | 'inactive';
-  createdAt: number;
-  usage: number;
-}
-
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
-interface ChatCompletionRequest {
-  model: string;
-  messages: ChatMessage[];
-}
+db = admin.database();
 
 // ============================================
 // 🛠️ Helper Functions
@@ -80,61 +54,44 @@ interface ChatCompletionRequest {
 
 function extractApiKey(req: VercelRequest): string | null {
   const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-  if (req.query.key && typeof req.query.key === 'string') {
-    return req.query.key;
-  }
+  if (authHeader?.startsWith('Bearer ')) return authHeader.substring(7);
+  if (req.query.key && typeof req.query.key === 'string') return req.query.key;
   return null;
 }
 
-async function validateApiKey(apiKey: string): Promise<{ uid: string; key: ApiKey } | null> {
+async function validateApiKey(apiKey: string): Promise<any | null> {
   if (!apiKey || !db) return null;
-
   try {
     const usersRef = db.ref('users');
     const snapshot = await usersRef.once('value');
     const users = snapshot.val();
-
     if (!users) return null;
-
     for (const uid of Object.keys(users)) {
       const userData = users[uid];
       if (userData.keys && userData.keys[apiKey]) {
         const keyData = userData.keys[apiKey];
-        if (keyData.status === 'active') {
-          return { uid, key: keyData };
-        }
+        if (keyData.status === 'active') return { uid, key: keyData };
       }
     }
     return null;
   } catch (error) {
-    console.error('API key validation error:', error);
     return null;
   }
 }
 
 async function deductBalance(uid: string, keyId: string, amount: number): Promise<boolean> {
   if (!db) return false;
-
   try {
     const keyRef = db.ref(`users/${uid}/keys/${keyId}`);
     const snapshot = await keyRef.once('value');
     const keyData = snapshot.val();
-
-    if (!keyData || keyData.balance < amount) {
-      return false;
-    }
-
+    if (!keyData || keyData.balance < amount) return false;
     await keyRef.update({
       balance: keyData.balance - amount,
       usage: (keyData.usage || 0) + 1,
     });
-
     return true;
   } catch (error) {
-    console.error('Balance deduction error:', error);
     return false;
   }
 }
@@ -142,9 +99,7 @@ async function deductBalance(uid: string, keyId: string, amount: number): Promis
 function generateId(prefix: string = ''): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let id = '';
-  for (let i = 0; i < 16; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  for (let i = 0; i < 16; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
   return prefix + id;
 }
 
@@ -159,8 +114,8 @@ async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
   const validation = await validateApiKey(apiKey);
   if (!validation) return res.status(401).json({ error: { message: 'Invalid API key' } });
 
-  const body = req.body as ChatCompletionRequest;
-  const lastUserMessage = body.messages?.filter(m => m.role === 'user').pop();
+  const body = req.body;
+  const lastUserMessage = body.messages?.filter((m: any) => m.role === 'user').pop();
   if (!lastUserMessage) return res.status(400).json({ error: { message: 'Prompt required' } });
 
   const cost = 10;
@@ -189,11 +144,11 @@ async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
       });
 
       if (videoResponse.ok) {
-        const videoData = await videoResponse.json();
+        const videoData: any = await videoResponse.json();
         taskId = videoData?.data?.task_id || videoData?.task_id || taskId;
       }
     } catch (err) {
-      console.error('Supabase error (hidden):', err);
+      console.error('Supabase error:', err);
     }
 
     return res.status(200).json({
@@ -226,8 +181,8 @@ async function handleImageGeneration(req: VercelRequest, res: VercelResponse) {
   const validation = await validateApiKey(apiKey);
   if (!validation) return res.status(401).json({ error: { message: 'Invalid API key' } });
 
-  const body = req.body as ChatCompletionRequest;
-  const lastUserMessage = body.messages?.filter(m => m.role === 'user').pop();
+  const body = req.body;
+  const lastUserMessage = body.messages?.filter((m: any) => m.role === 'user').pop();
   if (!lastUserMessage) return res.status(400).json({ error: { message: 'Prompt required' } });
 
   const cost = 5;
@@ -249,11 +204,11 @@ async function handleImageGeneration(req: VercelRequest, res: VercelResponse) {
       });
 
       if (imageResponse.ok) {
-        const imageData = await imageResponse.json();
+        const imageData: any = await imageResponse.json();
         imageUrl = imageData?.imageUrl || imageUrl;
       }
     } catch (err) {
-      console.error('Supabase error (hidden):', err);
+      console.error('Supabase error:', err);
     }
 
     return res.status(200).json({
@@ -280,8 +235,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (path === '/v1/chat/completions' && req.method === 'POST') {
-      const body = req.body as ChatCompletionRequest;
-      const prompt = body.messages?.filter(m => m.role === 'user').pop()?.content.toLowerCase() || '';
+      const body = req.body;
+      const prompt = body.messages?.filter((m: any) => m.role === 'user').pop()?.content.toLowerCase() || '';
       
       if (prompt.includes('video') || prompt.includes('فيديو')) {
         return await handleVideoGeneration(req, res);
