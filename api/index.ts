@@ -2,55 +2,31 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
 // ============================================
-// 🔐 Firebase Configuration
+// 🔐 Hardcoded Configuration (No .env required for Vercel)
 // ============================================
 
-const FIREBASE_CONFIG = {
-  type: "service_account",
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL,
-  client_id: process.env.FIREBASE_CLIENT_ID,
-  auth_uri: "https://accounts.google.com/o/oauth2/auth",
-  token_uri: "https://oauth2.googleapis.com/token",
-  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
-  universe_domain: "googleapis.com"
-};
-
-// ============================================
-// 🔒 Supabase Configuration (Hidden from clients)
-// ============================================
-
-const SUPABASE_CONFIG = {
-  URL: process.env.SUPABASE_URL || "",
-  KEY: process.env.SUPABASE_KEY || "",
-  FUNCTIONS: {
-    VIDEO_SUBMIT: `${process.env.SUPABASE_URL}/functions/v1/kling-omni-video-submit`,
-    VIDEO_QUERY: `${process.env.SUPABASE_URL}/functions/v1/kling-omni-video-query`,
-    IMAGE_GENERATOR: `${process.env.SUPABASE_URL}/functions/v1/gemini-image-enhanced`
+const CONFIG = {
+  FIREBASE: {
+    project_id: "flow-afnan",
+    private_key: `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7Xx8...
+-----END PRIVATE KEY-----`.replace(/\\n/g, '\n'),
+    client_email: "firebase-adminsdk-fbsvc@flow-afnan.iam.gserviceaccount.com",
+    databaseURL: "https://flow-afnan-default-rtdb.asia-southeast1.firebasedatabase.app"
+  },
+  SUPABASE: {
+    URL: "https://gitdahrfgbkkuausumlf.supabase.co",
+    KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpdGRhaHJmZ2Jra3VhdXN1bWxmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0Njk0ODQsImV4cCI6MjA5NjA0NTQ4NH0.MeQaW6QpVxchuRrRVZL7LBd1u5IQK5d4vyRd5csosZs"
+  },
+  APP: {
+    BASE_URL: "https://hostools.vercel.app",
+    VERSION: "2.1.0"
+  },
+  MODELS: {
+    VIDEO: 'kling-v3-omni',
+    IMAGE: 'gemini-image-enhanced',
+    CHAT: 'gpt-3.5-turbo'
   }
-};
-
-// ============================================
-// ⚙️ App Configuration
-// ============================================
-
-const APP_CONFIG = {
-  NAME: 'HostTools API',
-  VERSION: '2.0.0',
-  BASE_URL: process.env.BASE_URL || 'https://hostools.vercel.app',
-};
-
-// ============================================
-// 📊 Model Names
-// ============================================
-
-const MODELS = {
-  VIDEO: 'kling-v3-omni',
-  IMAGE: 'gemini-image-enhanced',
-  CHAT: 'gpt-3.5-turbo',
 };
 
 // ============================================
@@ -62,14 +38,16 @@ let db: admin.database.Database;
 if (!admin.apps.length) {
   try {
     admin.initializeApp({
-      credential: admin.credential.cert(FIREBASE_CONFIG as any),
-      databaseURL: process.env.FIREBASE_DB_URL
+      credential: admin.credential.cert(CONFIG.FIREBASE as any),
+      databaseURL: CONFIG.FIREBASE.databaseURL
     });
     db = admin.database();
-    console.log('✅ Firebase initialized');
+    console.log('✅ Firebase initialized with hardcoded config');
   } catch (error) {
     console.error('❌ Firebase init error:', error);
   }
+} else {
+  db = admin.database();
 }
 
 // ============================================
@@ -94,10 +72,6 @@ interface ChatMessage {
 interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-  stream?: boolean;
 }
 
 // ============================================
@@ -180,65 +154,22 @@ function generateId(prefix: string = ''): string {
 
 async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
   const apiKey = extractApiKey(req);
-  if (!apiKey) {
-    return res.status(401).json({
-      error: {
-        message: 'Missing API key',
-        type: 'invalid_request_error',
-        code: 'missing_api_key'
-      }
-    });
-  }
+  if (!apiKey) return res.status(401).json({ error: { message: 'Missing API key' } });
 
   const validation = await validateApiKey(apiKey);
-  if (!validation) {
-    return res.status(401).json({
-      error: {
-        message: 'Invalid or inactive API key',
-        type: 'invalid_request_error',
-        code: 'invalid_api_key'
-      }
-    });
-  }
+  if (!validation) return res.status(401).json({ error: { message: 'Invalid API key' } });
 
   const body = req.body as ChatCompletionRequest;
-  if (!body.messages || !Array.isArray(body.messages)) {
-    return res.status(400).json({
-      error: {
-        message: 'messages is required and must be an array',
-        type: 'invalid_request_error',
-        code: 'invalid_request_error'
-      }
-    });
-  }
-
-  const lastUserMessage = body.messages.filter(m => m.role === 'user').pop();
-  if (!lastUserMessage) {
-    return res.status(400).json({
-      error: {
-        message: 'At least one user message is required',
-        type: 'invalid_request_error',
-        code: 'invalid_request_error'
-      }
-    });
-  }
+  const lastUserMessage = body.messages?.filter(m => m.role === 'user').pop();
+  if (!lastUserMessage) return res.status(400).json({ error: { message: 'Prompt required' } });
 
   const cost = 10;
   const deducted = await deductBalance(validation.uid, apiKey, cost);
-  if (!deducted) {
-    return res.status(402).json({
-      error: {
-        message: `Insufficient balance. Need ${cost} credits`,
-        type: 'insufficient_quota',
-        code: 'insufficient_balance'
-      }
-    });
-  }
+  if (!deducted) return res.status(402).json({ error: { message: 'Insufficient balance' } });
 
   try {
-    // Call Supabase (Hidden from client)
     const videoPayload = {
-      model_name: MODELS.VIDEO,
+      model_name: CONFIG.MODELS.VIDEO,
       prompt: lastUserMessage.content,
       aspect_ratio: '16:9',
       duration: '10',
@@ -248,11 +179,11 @@ async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
 
     let taskId = 'task_' + generateId();
     try {
-      const videoResponse = await fetch(SUPABASE_CONFIG.FUNCTIONS.VIDEO_SUBMIT, {
+      const videoResponse = await fetch(`${CONFIG.SUPABASE.URL}/functions/v1/kling-omni-video-submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}`
+          'Authorization': `Bearer ${CONFIG.SUPABASE.KEY}`
         },
         body: JSON.stringify(videoPayload)
       });
@@ -262,46 +193,25 @@ async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
         taskId = videoData?.data?.task_id || videoData?.task_id || taskId;
       }
     } catch (err) {
-      console.error('Supabase call error (hidden):', err);
+      console.error('Supabase error (hidden):', err);
     }
 
     return res.status(200).json({
       id: 'chatcmpl-' + generateId(),
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: MODELS.VIDEO,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: JSON.stringify({
-              type: 'video_generation',
-              task_id: taskId,
-              status: 'processing',
-              prompt: lastUserMessage.content,
-              model: MODELS.VIDEO,
-              created_at: new Date().toISOString()
-            }, null, 2)
-          },
-          finish_reason: 'stop'
-        }
-      ],
-      usage: {
-        prompt_tokens: Math.ceil(lastUserMessage.content.length / 4),
-        completion_tokens: 100,
-        total_tokens: Math.ceil(lastUserMessage.content.length / 4) + 100
-      }
+      model: CONFIG.MODELS.VIDEO,
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({ type: 'video_generation', task_id: taskId, status: 'processing', model: CONFIG.MODELS.VIDEO }, null, 2)
+        },
+        finish_reason: 'stop'
+      }]
     });
   } catch (error) {
-    console.error('Video generation error:', error);
-    return res.status(500).json({
-      error: {
-        message: 'Internal server error',
-        type: 'server_error',
-        code: 'internal_error'
-      }
-    });
+    return res.status(500).json({ error: { message: 'Internal server error' } });
   }
 }
 
@@ -311,242 +221,48 @@ async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
 
 async function handleImageGeneration(req: VercelRequest, res: VercelResponse) {
   const apiKey = extractApiKey(req);
-  if (!apiKey) {
-    return res.status(401).json({
-      error: {
-        message: 'Missing API key',
-        type: 'invalid_request_error',
-        code: 'missing_api_key'
-      }
-    });
-  }
+  if (!apiKey) return res.status(401).json({ error: { message: 'Missing API key' } });
 
   const validation = await validateApiKey(apiKey);
-  if (!validation) {
-    return res.status(401).json({
-      error: {
-        message: 'Invalid or inactive API key',
-        type: 'invalid_request_error',
-        code: 'invalid_api_key'
-      }
-    });
-  }
+  if (!validation) return res.status(401).json({ error: { message: 'Invalid API key' } });
 
   const body = req.body as ChatCompletionRequest;
-  if (!body.messages || !Array.isArray(body.messages)) {
-    return res.status(400).json({
-      error: {
-        message: 'messages is required and must be an array',
-        type: 'invalid_request_error',
-        code: 'invalid_request_error'
-      }
-    });
-  }
-
-  const lastUserMessage = body.messages.filter(m => m.role === 'user').pop();
-  if (!lastUserMessage) {
-    return res.status(400).json({
-      error: {
-        message: 'At least one user message is required',
-        type: 'invalid_request_error',
-        code: 'invalid_request_error'
-      }
-    });
-  }
+  const lastUserMessage = body.messages?.filter(m => m.role === 'user').pop();
+  if (!lastUserMessage) return res.status(400).json({ error: { message: 'Prompt required' } });
 
   const cost = 5;
   const deducted = await deductBalance(validation.uid, apiKey, cost);
-  if (!deducted) {
-    return res.status(402).json({
-      error: {
-        message: `Insufficient balance. Need ${cost} credits`,
-        type: 'insufficient_quota',
-        code: 'insufficient_balance'
-      }
-    });
-  }
+  if (!deducted) return res.status(402).json({ error: { message: 'Insufficient balance' } });
 
   try {
-    // Call Supabase (Hidden from client)
-    const imagePayload = {
-      prompt: lastUserMessage.content,
-      targetWidth: 2048,
-      targetHeight: 2048,
-      targetSizeMB: 6
-    };
+    const imagePayload = { prompt: lastUserMessage.content, targetWidth: 2048, targetHeight: 2048 };
 
     let imageUrl = `https://media.pollinations.ai/image/${encodeURIComponent(lastUserMessage.content)}?model=flux`;
     try {
-      const imageResponse = await fetch(SUPABASE_CONFIG.FUNCTIONS.IMAGE_GENERATOR, {
+      const imageResponse = await fetch(`${CONFIG.SUPABASE.URL}/functions/v1/gemini-image-enhanced`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}`
+          'Authorization': `Bearer ${CONFIG.SUPABASE.KEY}`
         },
         body: JSON.stringify(imagePayload)
       });
 
       if (imageResponse.ok) {
         const imageData = await imageResponse.json();
-        if (imageData?.imageUrl) {
-          imageUrl = imageData.imageUrl;
-        }
+        imageUrl = imageData?.imageUrl || imageUrl;
       }
     } catch (err) {
-      console.error('Supabase call error (hidden):', err);
+      console.error('Supabase error (hidden):', err);
     }
 
     return res.status(200).json({
       created: Math.floor(Date.now() / 1000),
-      data: [
-        {
-          url: imageUrl
-        }
-      ]
+      data: [{ url: imageUrl }]
     });
   } catch (error) {
-    console.error('Image generation error:', error);
-    return res.status(500).json({
-      error: {
-        message: 'Internal server error',
-        type: 'server_error',
-        code: 'internal_error'
-      }
-    });
+    return res.status(500).json({ error: { message: 'Internal server error' } });
   }
-}
-
-// ============================================
-// 💬 Chat Completions Handler
-// ============================================
-
-async function handleChatCompletions(req: VercelRequest, res: VercelResponse) {
-  const apiKey = extractApiKey(req);
-  if (!apiKey) {
-    return res.status(401).json({
-      error: {
-        message: 'Missing API key',
-        type: 'invalid_request_error',
-        code: 'missing_api_key'
-      }
-    });
-  }
-
-  const validation = await validateApiKey(apiKey);
-  if (!validation) {
-    return res.status(401).json({
-      error: {
-        message: 'Invalid or inactive API key',
-        type: 'invalid_request_error',
-        code: 'invalid_api_key'
-      }
-    });
-  }
-
-  const body = req.body as ChatCompletionRequest;
-  if (!body.messages || !Array.isArray(body.messages)) {
-    return res.status(400).json({
-      error: {
-        message: 'messages is required and must be an array',
-        type: 'invalid_request_error',
-        code: 'invalid_request_error'
-      }
-    });
-  }
-
-  const lastUserMessage = body.messages.filter(m => m.role === 'user').pop();
-  if (!lastUserMessage) {
-    return res.status(400).json({
-      error: {
-        message: 'At least one user message is required',
-        type: 'invalid_request_error',
-        code: 'invalid_request_error'
-      }
-    });
-  }
-
-  const prompt = lastUserMessage.content.toLowerCase();
-  const isVideoRequest = prompt.includes('video') || prompt.includes('فيديو');
-  const isImageRequest = prompt.includes('image') || prompt.includes('صورة');
-
-  if (isVideoRequest) {
-    return handleVideoGeneration(req, res);
-  } else if (isImageRequest) {
-    return handleImageGeneration(req, res);
-  } else {
-    return res.status(200).json({
-      id: 'chatcmpl-' + generateId(),
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model: MODELS.CHAT,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: 'Hello! I can help you generate videos or images. Try asking for a video or image generation.'
-          },
-          finish_reason: 'stop'
-        }
-      ],
-      usage: {
-        prompt_tokens: Math.ceil(lastUserMessage.content.length / 4),
-        completion_tokens: 50,
-        total_tokens: Math.ceil(lastUserMessage.content.length / 4) + 50
-      }
-    });
-  }
-}
-
-// ============================================
-// 📊 Health Check Handler
-// ============================================
-
-async function handleHealth(req: VercelRequest, res: VercelResponse) {
-  return res.status(200).json({
-    status: 'healthy',
-    timestamp: Date.now(),
-    version: APP_CONFIG.VERSION,
-    app: APP_CONFIG.NAME,
-    models: {
-      video: MODELS.VIDEO,
-      image: MODELS.IMAGE,
-      chat: MODELS.CHAT
-    }
-  });
-}
-
-// ============================================
-// 📋 List Models Handler
-// ============================================
-
-async function handleListModels(req: VercelRequest, res: VercelResponse) {
-  return res.status(200).json({
-    object: 'list',
-    data: [
-      {
-        id: MODELS.VIDEO,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'hostools',
-        type: 'video_generation'
-      },
-      {
-        id: MODELS.IMAGE,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'hostools',
-        type: 'image_generation'
-      },
-      {
-        id: MODELS.CHAT,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'hostools',
-        type: 'chat'
-      }
-    ]
-  });
 }
 
 // ============================================
@@ -554,83 +270,51 @@ async function handleListModels(req: VercelRequest, res: VercelResponse) {
 // ============================================
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const path = req.url?.split('?')[0] || '';
 
   try {
-    // Health check
-    if (path === '/api/health' || path === '/health') {
-      return await handleHealth(req, res);
-    }
-
-    // List models
-    if (path === '/v1/models') {
-      return await handleListModels(req, res);
-    }
-
-    // Chat completions
-    if (path === '/v1/chat/completions') {
-      if (req.method === 'POST') {
-        return await handleChatCompletions(req, res);
-      }
-      return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    // Video generation
-    if (path === '/v1/videos/generations') {
-      if (req.method === 'POST') {
+    if (path === '/v1/chat/completions' && req.method === 'POST') {
+      const body = req.body as ChatCompletionRequest;
+      const prompt = body.messages?.filter(m => m.role === 'user').pop()?.content.toLowerCase() || '';
+      
+      if (prompt.includes('video') || prompt.includes('فيديو')) {
         return await handleVideoGeneration(req, res);
-      }
-      return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    // Image generation
-    if (path === '/v1/images/generations') {
-      if (req.method === 'POST') {
+      } else if (prompt.includes('image') || prompt.includes('صورة')) {
         return await handleImageGeneration(req, res);
+      } else {
+        return res.status(200).json({
+          id: 'chatcmpl-' + generateId(),
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: CONFIG.MODELS.CHAT,
+          choices: [{ index: 0, message: { role: 'assistant', content: 'I can generate videos and images. Ask for a video or image!' }, finish_reason: 'stop' }]
+        });
       }
-      return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // Root endpoint
-    if (path === '/' || path === '/api') {
+    if (path === '/v1/models') {
       return res.status(200).json({
-        name: APP_CONFIG.NAME,
-        version: APP_CONFIG.VERSION,
-        status: 'active',
-        endpoints: {
-          GET: ['/api/health', '/v1/models'],
-          POST: ['/v1/chat/completions', '/v1/videos/generations', '/v1/images/generations']
-        },
-        auth: 'Bearer YOUR_API_KEY',
-        compatible: 'OpenAI API'
+        object: 'list',
+        data: [
+          { id: CONFIG.MODELS.VIDEO, object: 'model', type: 'video_generation' },
+          { id: CONFIG.MODELS.IMAGE, object: 'model', type: 'image_generation' },
+          { id: CONFIG.MODELS.CHAT, object: 'model', type: 'chat' }
+        ]
       });
     }
 
-    // 404
-    return res.status(404).json({
-      error: {
-        message: 'Endpoint not found',
-        type: 'invalid_request_error',
-        code: 'not_found'
-      }
-    });
+    if (path === '/api/health') {
+      return res.status(200).json({ status: 'healthy', version: CONFIG.APP.VERSION });
+    }
+
+    return res.status(404).json({ error: { message: 'Endpoint not found' } });
   } catch (error) {
-    console.error('Unhandled error:', error);
-    return res.status(500).json({
-      error: {
-        message: 'Internal server error',
-        type: 'server_error',
-        code: 'internal_error'
-      }
-    });
+    return res.status(500).json({ error: { message: 'Internal server error' } });
   }
 }
