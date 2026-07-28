@@ -59,12 +59,264 @@ function generateId(prefix: string = ''): string {
   return prefix + id;
 }
 
+function extractApiKey(req: VercelRequest): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) return authHeader.substring(7);
+  if (req.query.key && typeof req.query.key === 'string') return req.query.key;
+  return null;
+}
+
+async function validateApiKey(apiKey: string): Promise<any | null> {
+  const database = initFirebase();
+  if (!apiKey || !database) return null;
+  try {
+    const usersRef = database.ref('users');
+    const snapshot = await usersRef.once('value');
+    const users = snapshot.val();
+    if (!users) return null;
+    for (const uid of Object.keys(users)) {
+      const userData = users[uid];
+      if (userData.keys && userData.keys[apiKey]) {
+        const keyData = userData.keys[apiKey];
+        if (keyData.status === 'active') return { uid, key: keyData };
+      }
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function deductBalance(uid: string, keyId: string, amount: number): Promise<boolean> {
+  const database = initFirebase();
+  if (!database) return false;
+  try {
+    const keyRef = database.ref(`users/${uid}/keys/${keyId}`);
+    const snapshot = await keyRef.once('value');
+    const keyData = snapshot.val();
+    if (!keyData || keyData.balance < amount) return false;
+    await keyRef.update({
+      balance: keyData.balance - amount,
+      usage: (keyData.usage || 0) + 1,
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// ============================================
+// 📊 Task Management Endpoints
+// ============================================
+
+async function handleTaskStatus(req: VercelRequest, res: VercelResponse) {
+  const taskId = req.query.task_id as string;
+  if (!taskId) return res.status(400).json({ error: 'task_id required' });
+
+  try {
+    const database = initFirebase();
+    if (!database) return res.status(500).json({ error: 'DB error' });
+
+    const taskRef = database.ref(`tasks/${taskId}`);
+    const snapshot = await taskRef.once('value');
+    const taskData = snapshot.val();
+
+    if (!taskData) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    return res.status(200).json({
+      task_id: taskId,
+      status: taskData.status,
+      progress: taskData.progress || 0,
+      result_url: taskData.result_url || null,
+      error: taskData.error || null,
+      created_at: taskData.created_at,
+      updated_at: taskData.updated_at
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal error' });
+  }
+}
+
+// ============================================
+// 🎬 Video Generation Handler
+// ============================================
+
+async function handleVideoGeneration(req: VercelRequest, res: VercelResponse) {
+  const apiKey = extractApiKey(req);
+  if (!apiKey) return res.status(401).json({ error: { message: 'Missing API key' } });
+
+  const validation = await validateApiKey(apiKey);
+  if (!validation) return res.status(401).json({ error: { message: 'Invalid API key' } });
+
+  const body = req.body || {};
+  const messages = body.messages || [];
+  const prompt = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
+
+  if (!prompt) return res.status(400).json({ error: { message: 'Prompt required' } });
+
+  const cost = 10;
+  const deducted = await deductBalance(validation.uid, apiKey, cost);
+  if (!deducted) return res.status(402).json({ error: { message: 'Insufficient balance' } });
+
+  try {
+    const taskId = 'task_' + generateId();
+    const database = initFirebase();
+
+    // Store task in Firebase
+    if (database) {
+      await database.ref(`tasks/${taskId}`).set({
+        type: 'video',
+        prompt: prompt,
+        status: 'processing',
+        progress: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_id: validation.uid,
+        api_key: apiKey
+      });
+    }
+
+    // Call Supabase (Hidden from client)
+    try {
+      const videoResponse = await fetch(`${CONFIG.SUPABASE.URL}/functions/v1/kling-omni-video-submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.SUPABASE.KEY}`
+        },
+        body: JSON.stringify({
+          model_name: CONFIG.MODELS.VIDEO,
+          prompt: prompt,
+          task_id: taskId,
+          aspect_ratio: '16:9',
+          duration: '10',
+          mode: 'pro',
+          sound: 'on'
+        })
+      });
+
+      if (videoResponse.ok) {
+        const videoData: any = await videoResponse.json();
+        if (database && videoData?.data?.task_id) {
+          await database.ref(`tasks/${taskId}`).update({
+            supabase_task_id: videoData.data.task_id
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Supabase error:', err);
+    }
+
+    return res.status(200).json({
+      id: 'chatcmpl-' + generateId(),
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: CONFIG.MODELS.VIDEO,
+      task_id: taskId,
+      status: 'processing',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: `Video generation started. Task ID: ${taskId}. Check status at /v1/tasks/status?task_id=${taskId}`
+        },
+        finish_reason: 'stop'
+      }]
+    });
+  } catch (error) {
+    return res.status(500).json({ error: { message: 'Internal server error' } });
+  }
+}
+
+// ============================================
+// 🖼️ Image Generation Handler
+// ============================================
+
+async function handleImageGeneration(req: VercelRequest, res: VercelResponse) {
+  const apiKey = extractApiKey(req);
+  if (!apiKey) return res.status(401).json({ error: { message: 'Missing API key' } });
+
+  const validation = await validateApiKey(apiKey);
+  if (!validation) return res.status(401).json({ error: { message: 'Invalid API key' } });
+
+  const body = req.body || {};
+  const messages = body.messages || [];
+  const prompt = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
+
+  if (!prompt) return res.status(400).json({ error: { message: 'Prompt required' } });
+
+  const cost = 5;
+  const deducted = await deductBalance(validation.uid, apiKey, cost);
+  if (!deducted) return res.status(402).json({ error: { message: 'Insufficient balance' } });
+
+  try {
+    const taskId = 'task_' + generateId();
+    const database = initFirebase();
+
+    // Store task in Firebase
+    if (database) {
+      await database.ref(`tasks/${taskId}`).set({
+        type: 'image',
+        prompt: prompt,
+        status: 'processing',
+        progress: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_id: validation.uid,
+        api_key: apiKey
+      });
+    }
+
+    // Call Supabase (Hidden from client)
+    try {
+      const imageResponse = await fetch(`${CONFIG.SUPABASE.URL}/functions/v1/gemini-image-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.SUPABASE.KEY}`
+        },
+        body: JSON.stringify({
+          prompt: prompt,
+          task_id: taskId,
+          targetWidth: 2048,
+          targetHeight: 2048
+        })
+      });
+
+      if (imageResponse.ok) {
+        const imageData: any = await imageResponse.json();
+        if (database && imageData?.imageUrl) {
+          await database.ref(`tasks/${taskId}`).update({
+            result_url: imageData.imageUrl,
+            status: 'completed'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Supabase error:', err);
+    }
+
+    return res.status(200).json({
+      created: Math.floor(Date.now() / 1000),
+      task_id: taskId,
+      status: 'processing',
+      data: [{
+        url: null,
+        task_id: taskId
+      }]
+    });
+  } catch (error) {
+    return res.status(500).json({ error: { message: 'Internal server error' } });
+  }
+}
+
 // ============================================
 // 🔀 Main Router
 // ============================================
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Global Error Handling
   try {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -74,64 +326,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const path = req.url?.split('?')[0] || '';
 
-    // 1. Health & Info (No DB required)
-    if (path === '/' || path === '/api' || path === '/api/health' || path === '') {
-      return res.status(200).json({
-        status: 'active',
-        name: "HostTools API",
-        version: "2.1.3",
-        compatible: "OpenAI",
-        endpoints: ["/v1/chat/completions", "/v1/models"]
-      });
+    // Task Status
+    if (path === '/v1/tasks/status') {
+      return await handleTaskStatus(req, res);
     }
 
-    // 2. Models List
+    // Chat Completions
+    if (path === '/v1/chat/completions' && req.method === 'POST') {
+      const body = req.body || {};
+      const messages = body.messages || [];
+      const prompt = messages.filter((m: any) => m.role === 'user').pop()?.content.toLowerCase() || '';
+
+      if (prompt.includes('video') || prompt.includes('فيديو')) {
+        return await handleVideoGeneration(req, res);
+      } else if (prompt.includes('image') || prompt.includes('صورة')) {
+        return await handleImageGeneration(req, res);
+      }
+    }
+
+    // Models List
     if (path === '/v1/models') {
       return res.status(200).json({
         object: 'list',
         data: [
-          { id: CONFIG.MODELS.VIDEO, object: 'model', type: 'video_generation' },
-          { id: CONFIG.MODELS.IMAGE, object: 'model', type: 'image_generation' },
-          { id: CONFIG.MODELS.CHAT, object: 'model', type: 'chat' }
+          { id: CONFIG.MODELS.VIDEO, object: 'model', type: 'video_generation', cost: 10 },
+          { id: CONFIG.MODELS.IMAGE, object: 'model', type: 'image_generation', cost: 5 },
+          { id: CONFIG.MODELS.CHAT, object: 'model', type: 'chat', cost: 0 }
         ]
       });
     }
 
-    // 3. Chat Completions
-    if (path === '/v1/chat/completions' && req.method === 'POST') {
-      const body = req.body || {};
-      const messages = body.messages || [];
-      const prompt = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
-      
-      const isVideo = prompt.toLowerCase().includes('video') || prompt.includes('فيديو');
-      const isImage = prompt.toLowerCase().includes('image') || prompt.includes('صورة');
-
-      // Note: Actual generation and DB logic would go here
-      // For now, return a success response to prove the function works
+    // Health Check
+    if (path === '/' || path === '/api' || path === '/api/health') {
       return res.status(200).json({
-        id: 'chatcmpl-' + generateId(),
-        object: 'chat.completion',
-        created: Math.floor(Date.now() / 1000),
-        model: isVideo ? CONFIG.MODELS.VIDEO : isImage ? CONFIG.MODELS.IMAGE : CONFIG.MODELS.CHAT,
-        choices: [{
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: `Request received for: ${isVideo ? 'Video' : isImage ? 'Image' : 'Chat'}. (Firebase/Supabase logic is active).`
-          },
-          finish_reason: 'stop'
-        }]
+        status: 'active',
+        version: '2.2.0',
+        endpoints: ['/v1/chat/completions', '/v1/tasks/status', '/v1/models']
       });
     }
 
-    return res.status(404).json({ error: "Not Found" });
-
+    return res.status(404).json({ error: 'Not found' });
   } catch (error: any) {
-    console.error('Runtime Error:', error);
-    return res.status(500).json({
-      error: "Internal Server Error",
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error('Error:', error);
+    return res.status(500).json({ error: error.message });
   }
 }

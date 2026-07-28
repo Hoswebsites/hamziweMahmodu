@@ -12,6 +12,12 @@
         .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .card-hover { transition: all 0.3s ease; }
         .card-hover:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .task-item { animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .status-processing { background: #fef3c7; color: #92400e; }
+        .status-completed { background: #d1fae5; color: #065f46; }
+        .status-failed { background: #fee2e2; color: #991b1b; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -27,7 +33,6 @@
     <div class="max-w-7xl mx-auto px-6 py-8">
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <!-- Balance Card -->
             <div class="card-hover bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
                 <div class="flex justify-between items-start">
                     <div>
@@ -39,84 +44,75 @@
                 </div>
             </div>
 
-            <!-- Videos Generated -->
             <div class="card-hover bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-gray-600 text-sm">الفيديوهات المولدة</p>
-                        <h2 id="videosDisplay" class="text-4xl font-bold text-blue-600 mt-2">0</h2>
-                        <p class="text-gray-500 text-xs mt-1">هذا الشهر</p>
+                        <p class="text-gray-600 text-sm">المهام الحالية</p>
+                        <h2 id="tasksDisplay" class="text-4xl font-bold text-blue-600 mt-2">0</h2>
+                        <p class="text-gray-500 text-xs mt-1">قيد المعالجة</p>
                     </div>
-                    <span class="text-3xl">🎬</span>
+                    <span class="text-3xl">⚙️</span>
                 </div>
             </div>
 
-            <!-- Images Generated -->
             <div class="card-hover bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-gray-600 text-sm">الصور المولدة</p>
-                        <h2 id="imagesDisplay" class="text-4xl font-bold text-purple-600 mt-2">0</h2>
+                        <p class="text-gray-600 text-sm">المهام المكتملة</p>
+                        <h2 id="completedDisplay" class="text-4xl font-bold text-purple-600 mt-2">0</h2>
                         <p class="text-gray-500 text-xs mt-1">هذا الشهر</p>
                     </div>
-                    <span class="text-3xl">🖼️</span>
+                    <span class="text-3xl">✅</span>
                 </div>
             </div>
         </div>
 
         <!-- Two Column Layout -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- API Keys Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- API Keys Management -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-                    <span>🔑</span> مفاتيح الـ API
+                    <span>🔑</span> إدارة المفاتيح
                 </h3>
-                <div class="space-y-4">
-                    <div class="bg-gray-50 p-4 rounded border border-gray-200">
-                        <p class="text-xs text-gray-500 mb-2">مفتاح الـ API الخاص بك:</p>
-                        <div class="flex gap-2">
-                            <input 
-                                id="apiKeyDisplay" 
-                                type="password" 
-                                class="flex-1 bg-white border border-gray-300 rounded px-3 py-2 text-sm font-mono"
-                                readonly
-                                value="sk_loading..."
-                            >
-                            <button 
-                                onclick="toggleApiKeyVisibility()"
-                                class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded text-sm transition"
-                            >
-                                👁️
-                            </button>
-                            <button 
-                                onclick="copyToClipboard()"
-                                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm transition"
-                            >
-                                نسخ
-                            </button>
-                        </div>
+                
+                <div class="space-y-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">اسم المفتاح:</label>
+                        <input id="keyName" type="text" placeholder="مثال: مفتاح التطوير" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                     </div>
 
-                    <div class="bg-blue-50 border border-blue-200 rounded p-4">
-                        <p class="text-xs text-blue-700 mb-2">📌 طريقة الاستخدام:</p>
-                        <code class="text-xs bg-white p-2 rounded block overflow-x-auto">
-curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
-  -H "Authorization: Bearer YOUR_API_KEY" \<br>
-  -H "Content-Type: application/json" \<br>
-  -d '{"messages":[{"role":"user","content":"generate video"}]}'
-                        </code>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">الرصيد المخصص:</label>
+                        <input id="keyQuota" type="number" placeholder="100" value="100" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                     </div>
 
                     <button 
-                        onclick="generateNewKey()"
-                        class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded transition"
+                        onclick="createNewKey()"
+                        class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded transition font-medium"
                     >
                         ✨ توليد مفتاح جديد
                     </button>
                 </div>
+
+                <div class="bg-gray-50 p-4 rounded border border-gray-200 mb-4">
+                    <p class="text-xs text-gray-500 mb-2">المفاتيح النشطة:</p>
+                    <div id="keysList" class="space-y-2">
+                        <p class="text-sm text-gray-500">جاري التحميل...</p>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 border border-blue-200 rounded p-3">
+                    <p class="text-xs text-blue-700">📌 استخدام الـ API:</p>
+                    <code class="text-xs bg-white p-2 rounded block overflow-x-auto mt-2">
+curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
+  -H "Authorization: Bearer YOUR_KEY" \<br>
+  -H "Content-Type: application/json" \<br>
+  -d '{"messages":[{"role":"user","content":"generate image"}]}'
+                    </code>
+                </div>
             </div>
 
-            <!-- Playground Section -->
+            <!-- Generation Playground -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
                     <span>🎮</span> تجربة التوليد
@@ -148,15 +144,24 @@ curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
                     </button>
 
                     <div id="resultArea" class="hidden bg-gray-50 border border-gray-200 rounded p-4">
-                        <p class="text-xs text-gray-500 mb-2">النتيجة:</p>
                         <div id="resultContent" class="text-sm text-gray-700 break-words"></div>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- Tasks Monitor -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                <span>📋</span> المهام الحالية
+            </h3>
+            <div id="tasksList" class="space-y-3">
+                <p class="text-sm text-gray-500">لا توجد مهام حالياً</p>
+            </div>
+        </div>
+
         <!-- Models Info -->
-        <div class="mt-8 bg-white rounded-lg shadow p-6">
+        <div class="bg-white rounded-lg shadow p-6">
             <h3 class="text-xl font-bold mb-4">📋 النماذج المتاحة</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded border border-blue-200">
@@ -179,7 +184,6 @@ curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
     </div>
 
     <script>
-        // Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyDPvKx...",
             authDomain: "flow-afnan.firebaseapp.com",
@@ -191,19 +195,15 @@ curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
         };
 
         let currentUser = null;
-        let apiKeyVisible = false;
+        let currentTasks = {};
 
-        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Load User Data
         async function loadUserData() {
             try {
-                // For demo, using a default user ID
                 const userId = localStorage.getItem('userId') || 'demo_user_123';
                 const userRef = db.ref(`users/${userId}`);
-                
                 userRef.on('value', (snapshot) => {
                     const userData = snapshot.val();
                     if (userData) {
@@ -212,72 +212,94 @@ curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
                     }
                 });
             } catch (error) {
-                console.error('Error loading user:', error);
-                document.getElementById('userInfo').textContent = '❌ خطأ في التحميل';
+                console.error('Error:', error);
             }
         }
 
-        // Update UI with user data
         function updateUI() {
             if (!currentUser) return;
-
-            // Update user info
             document.getElementById('userInfo').textContent = `مرحباً، ${currentUser.name || 'المستخدم'}`;
-
-            // Update balance
             document.getElementById('balanceDisplay').textContent = currentUser.balance || 0;
-
-            // Update stats
-            document.getElementById('videosDisplay').textContent = currentUser.videosGenerated || 0;
-            document.getElementById('imagesDisplay').textContent = currentUser.imagesGenerated || 0;
-
-            // Update API key
-            const apiKey = Object.keys(currentUser.keys || {})[0] || 'sk_not_generated';
-            document.getElementById('apiKeyDisplay').value = apiKey;
+            updateKeysList();
         }
 
-        // Toggle API Key Visibility
-        function toggleApiKeyVisibility() {
-            const input = document.getElementById('apiKeyDisplay');
-            apiKeyVisible = !apiKeyVisible;
-            input.type = apiKeyVisible ? 'text' : 'password';
+        function updateKeysList() {
+            const keysList = document.getElementById('keysList');
+            if (!currentUser?.keys) {
+                keysList.innerHTML = '<p class="text-sm text-gray-500">لا توجد مفاتيح</p>';
+                return;
+            }
+
+            const keysHtml = Object.entries(currentUser.keys).map(([key, data]: any) => `
+                <div class="bg-white p-3 rounded border border-gray-200 flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="font-medium text-sm">${data.name || 'بدون اسم'}</p>
+                        <p class="text-xs text-gray-500 font-mono">${key.substring(0, 10)}...</p>
+                        <p class="text-xs text-gray-600 mt-1">الرصيد: <strong>${data.balance || 0}</strong></p>
+                    </div>
+                    <button onclick="copyKey('${key}')" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs">
+                        نسخ
+                    </button>
+                </div>
+            `).join('');
+
+            keysList.innerHTML = keysHtml;
         }
 
-        // Copy to Clipboard
-        function copyToClipboard() {
-            const input = document.getElementById('apiKeyDisplay');
-            input.select();
-            document.execCommand('copy');
-            alert('✅ تم نسخ المفتاح!');
+        function createNewKey() {
+            const name = document.getElementById('keyName').value || 'مفتاح جديد';
+            const quota = parseInt(document.getElementById('keyQuota').value) || 100;
+            
+            if (!currentUser) return alert('❌ لم يتم تحميل بيانات المستخدم');
+
+            const newKey = 'sk_' + Math.random().toString(36).substring(2, 30);
+            const userId = localStorage.getItem('userId') || 'demo_user_123';
+
+            db.ref(`users/${userId}/keys/${newKey}`).set({
+                name: name,
+                balance: quota,
+                status: 'active',
+                created_at: new Date().toISOString(),
+                usage: 0
+            }).then(() => {
+                alert('✅ تم توليد المفتاح بنجاح!');
+                document.getElementById('keyName').value = '';
+                document.getElementById('keyQuota').value = '100';
+            }).catch(err => alert('❌ خطأ: ' + err.message));
         }
 
-        // Generate New API Key
-        function generateNewKey() {
-            const newKey = 'sk_' + Math.random().toString(36).substring(2, 15);
-            document.getElementById('apiKeyDisplay').value = newKey;
-            alert('✨ تم توليد مفتاح جديد: ' + newKey);
+        function copyKey(key: string) {
+            navigator.clipboard.writeText(key).then(() => {
+                alert('✅ تم نسخ المفتاح!');
+            });
         }
 
-        // Generate Content
         async function generateContent() {
             const type = document.getElementById('generationType').value;
             const prompt = document.getElementById('promptInput').value;
             const btn = document.getElementById('generateBtn');
 
-            if (!prompt.trim()) {
-                alert('⚠️ الرجاء إدخال وصف!');
-                return;
-            }
+            if (!prompt.trim()) return alert('⚠️ الرجاء إدخال وصف!');
 
             btn.disabled = true;
             btn.textContent = '⏳ جاري التوليد...';
 
             try {
-                const apiKey = document.getElementById('apiKeyDisplay').value;
+                const userId = localStorage.getItem('userId') || 'demo_user_123';
+                const keys = currentUser?.keys || {};
+                const firstKey = Object.keys(keys)[0];
+
+                if (!firstKey) {
+                    alert('❌ لا توجد مفاتيح API');
+                    btn.disabled = false;
+                    btn.textContent = '🚀 توليد الآن';
+                    return;
+                }
+
                 const response = await fetch('/v1/chat/completions', {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${apiKey}`,
+                        'Authorization': `Bearer ${firstKey}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
@@ -287,20 +309,32 @@ curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
                 });
 
                 const data = await response.json();
-                
-                if (response.ok) {
+
+                if (response.ok && data.task_id) {
+                    const taskId = data.task_id;
+                    currentTasks[taskId] = {
+                        id: taskId,
+                        type: type,
+                        prompt: prompt,
+                        status: 'processing',
+                        created_at: new Date().toISOString()
+                    };
+
                     document.getElementById('resultArea').classList.remove('hidden');
                     document.getElementById('resultContent').innerHTML = `
-                        <strong>✅ نجح التوليد!</strong><br>
-                        <pre class="mt-2 text-xs">${JSON.stringify(data, null, 2)}</pre>
+                        <strong>✅ تم بدء التوليد!</strong><br>
+                        <p class="text-xs mt-2">معرف المهمة: <code>${taskId}</code></p>
+                        <p class="text-xs text-gray-600 mt-1">جاري المراقبة كل 5 ثوانٍ...</p>
                     `;
+
+                    startPolling(taskId, firstKey);
                 } else {
                     document.getElementById('resultArea').classList.remove('hidden');
                     document.getElementById('resultContent').innerHTML = `
                         <strong>❌ خطأ:</strong> ${data.error?.message || 'حدث خطأ ما'}
                     `;
                 }
-            } catch (error) {
+            } catch (error: any) {
                 document.getElementById('resultArea').classList.remove('hidden');
                 document.getElementById('resultContent').innerHTML = `<strong>❌ خطأ:</strong> ${error.message}`;
             } finally {
@@ -309,7 +343,87 @@ curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
             }
         }
 
-        // Load data on page load
+        function startPolling(taskId: string, apiKey: string) {
+            let pollCount = 0;
+            const maxPolls = 120;
+
+            const poll = async () => {
+                pollCount++;
+                if (pollCount > maxPolls) {
+                    updateTasksList();
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/v1/tasks/status?task_id=${taskId}`, {
+                        headers: { 'Authorization': `Bearer ${apiKey}` }
+                    });
+
+                    const data = await response.json();
+
+                    if (data.status === 'completed') {
+                        currentTasks[taskId].status = 'completed';
+                        currentTasks[taskId].result_url = data.result_url;
+                        document.getElementById('resultContent').innerHTML = `
+                            <strong>✅ اكتمل التوليد!</strong><br>
+                            ${data.result_url ? `<img src="${data.result_url}" class="w-full mt-2 rounded" alt="Result">` : ''}
+                            <p class="text-xs mt-2"><a href="${data.result_url}" target="_blank" class="text-blue-500">فتح النتيجة</a></p>
+                        `;
+                        updateTasksList();
+                        return;
+                    } else if (data.status === 'failed') {
+                        currentTasks[taskId].status = 'failed';
+                        document.getElementById('resultContent').innerHTML = `
+                            <strong>❌ فشل التوليد:</strong> ${data.error || 'خطأ غير معروف'}
+                        `;
+                        updateTasksList();
+                        return;
+                    }
+
+                    updateTasksList();
+                    setTimeout(poll, 5000);
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    setTimeout(poll, 5000);
+                }
+            };
+
+            poll();
+        }
+
+        function updateTasksList() {
+            const tasksList = document.getElementById('tasksList');
+            const tasks = Object.values(currentTasks);
+
+            if (tasks.length === 0) {
+                tasksList.innerHTML = '<p class="text-sm text-gray-500">لا توجد مهام حالياً</p>';
+                return;
+            }
+
+            const processingCount = tasks.filter((t: any) => t.status === 'processing').length;
+            const completedCount = tasks.filter((t: any) => t.status === 'completed').length;
+
+            document.getElementById('tasksDisplay').textContent = processingCount;
+            document.getElementById('completedDisplay').textContent = completedCount;
+
+            const tasksHtml = tasks.map((task: any) => `
+                <div class="task-item bg-gray-50 p-4 rounded border border-gray-200">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <p class="font-medium text-sm">${task.type === 'video' ? '🎬' : '🖼️'} ${task.prompt.substring(0, 50)}...</p>
+                            <p class="text-xs text-gray-500 mt-1">المعرف: ${task.id}</p>
+                            <span class="status-badge status-${task.status} mt-2 inline-block">
+                                ${task.status === 'processing' ? '⏳ قيد المعالجة' : task.status === 'completed' ? '✅ مكتملة' : '❌ فشلت'}
+                            </span>
+                        </div>
+                        ${task.result_url ? `<a href="${task.result_url}" target="_blank" class="text-blue-500 text-xs hover:underline">فتح</a>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            tasksList.innerHTML = tasksHtml;
+        }
+
         window.addEventListener('load', loadUserData);
     </script>
 </body>
