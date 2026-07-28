@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HostTools API Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-database.js"></script>
+    <style>
+        * { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="gradient-bg text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold">🚀 HostTools API</h1>
+            <div id="userInfo" class="text-sm">جاري التحميل...</div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Balance Card -->
+            <div class="card-hover bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-600 text-sm">الرصيد المتبقي</p>
+                        <h2 id="balanceDisplay" class="text-4xl font-bold text-green-600 mt-2">0</h2>
+                        <p class="text-gray-500 text-xs mt-1">نقطة</p>
+                    </div>
+                    <span class="text-3xl">💰</span>
+                </div>
+            </div>
+
+            <!-- Videos Generated -->
+            <div class="card-hover bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-600 text-sm">الفيديوهات المولدة</p>
+                        <h2 id="videosDisplay" class="text-4xl font-bold text-blue-600 mt-2">0</h2>
+                        <p class="text-gray-500 text-xs mt-1">هذا الشهر</p>
+                    </div>
+                    <span class="text-3xl">🎬</span>
+                </div>
+            </div>
+
+            <!-- Images Generated -->
+            <div class="card-hover bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-600 text-sm">الصور المولدة</p>
+                        <h2 id="imagesDisplay" class="text-4xl font-bold text-purple-600 mt-2">0</h2>
+                        <p class="text-gray-500 text-xs mt-1">هذا الشهر</p>
+                    </div>
+                    <span class="text-3xl">🖼️</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two Column Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- API Keys Section -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span>🔑</span> مفاتيح الـ API
+                </h3>
+                <div class="space-y-4">
+                    <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                        <p class="text-xs text-gray-500 mb-2">مفتاح الـ API الخاص بك:</p>
+                        <div class="flex gap-2">
+                            <input 
+                                id="apiKeyDisplay" 
+                                type="password" 
+                                class="flex-1 bg-white border border-gray-300 rounded px-3 py-2 text-sm font-mono"
+                                readonly
+                                value="sk_loading..."
+                            >
+                            <button 
+                                onclick="toggleApiKeyVisibility()"
+                                class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded text-sm transition"
+                            >
+                                👁️
+                            </button>
+                            <button 
+                                onclick="copyToClipboard()"
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm transition"
+                            >
+                                نسخ
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                        <p class="text-xs text-blue-700 mb-2">📌 طريقة الاستخدام:</p>
+                        <code class="text-xs bg-white p-2 rounded block overflow-x-auto">
+curl -X POST https://hoskools.vercel.app/v1/chat/completions \<br>
+  -H "Authorization: Bearer YOUR_API_KEY" \<br>
+  -H "Content-Type: application/json" \<br>
+  -d '{"messages":[{"role":"user","content":"generate video"}]}'
+                        </code>
+                    </div>
+
+                    <button 
+                        onclick="generateNewKey()"
+                        class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded transition"
+                    >
+                        ✨ توليد مفتاح جديد
+                    </button>
+                </div>
+            </div>
+
+            <!-- Playground Section -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span>🎮</span> تجربة التوليد
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">نوع التوليد:</label>
+                        <select id="generationType" class="w-full border border-gray-300 rounded px-3 py-2">
+                            <option value="image">صورة 🖼️</option>
+                            <option value="video">فيديو 🎬</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">الوصف (Prompt):</label>
+                        <textarea 
+                            id="promptInput"
+                            class="w-full border border-gray-300 rounded px-3 py-2 h-24 resize-none"
+                            placeholder="اكتب وصفاً لما تريد توليده..."
+                        ></textarea>
+                    </div>
+
+                    <button 
+                        onclick="generateContent()"
+                        id="generateBtn"
+                        class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-2 rounded transition font-medium"
+                    >
+                        🚀 توليد الآن
+                    </button>
+
+                    <div id="resultArea" class="hidden bg-gray-50 border border-gray-200 rounded p-4">
+                        <p class="text-xs text-gray-500 mb-2">النتيجة:</p>
+                        <div id="resultContent" class="text-sm text-gray-700 break-words"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Models Info -->
+        <div class="mt-8 bg-white rounded-lg shadow p-6">
+            <h3 class="text-xl font-bold mb-4">📋 النماذج المتاحة</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded border border-blue-200">
+                    <p class="font-bold text-blue-900">🎬 فيديو</p>
+                    <p class="text-sm text-blue-700 mt-1">kling-v3-omni</p>
+                    <p class="text-xs text-blue-600 mt-2">التكلفة: 10 نقاط</p>
+                </div>
+                <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded border border-purple-200">
+                    <p class="font-bold text-purple-900">🖼️ صورة</p>
+                    <p class="text-sm text-purple-700 mt-1">gemini-image-enhanced</p>
+                    <p class="text-xs text-purple-600 mt-2">التكلفة: 5 نقاط</p>
+                </div>
+                <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded border border-green-200">
+                    <p class="font-bold text-green-900">💬 دردشة</p>
+                    <p class="text-sm text-green-700 mt-1">gpt-3.5-turbo</p>
+                    <p class="text-xs text-green-600 mt-2">التكلفة: مجاني</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDPvKx...",
+            authDomain: "flow-afnan.firebaseapp.com",
+            databaseURL: "https://flow-afnan-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "flow-afnan",
+            storageBucket: "flow-afnan.appspot.com",
+            messagingSenderId: "...",
+            appId: "..."
+        };
+
+        let currentUser = null;
+        let apiKeyVisible = false;
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Load User Data
+        async function loadUserData() {
+            try {
+                // For demo, using a default user ID
+                const userId = localStorage.getItem('userId') || 'demo_user_123';
+                const userRef = db.ref(`users/${userId}`);
+                
+                userRef.on('value', (snapshot) => {
+                    const userData = snapshot.val();
+                    if (userData) {
+                        currentUser = userData;
+                        updateUI();
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading user:', error);
+                document.getElementById('userInfo').textContent = '❌ خطأ في التحميل';
+            }
+        }
+
+        // Update UI with user data
+        function updateUI() {
+            if (!currentUser) return;
+
+            // Update user info
+            document.getElementById('userInfo').textContent = `مرحباً، ${currentUser.name || 'المستخدم'}`;
+
+            // Update balance
+            document.getElementById('balanceDisplay').textContent = currentUser.balance || 0;
+
+            // Update stats
+            document.getElementById('videosDisplay').textContent = currentUser.videosGenerated || 0;
+            document.getElementById('imagesDisplay').textContent = currentUser.imagesGenerated || 0;
+
+            // Update API key
+            const apiKey = Object.keys(currentUser.keys || {})[0] || 'sk_not_generated';
+            document.getElementById('apiKeyDisplay').value = apiKey;
+        }
+
+        // Toggle API Key Visibility
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('apiKeyDisplay');
+            apiKeyVisible = !apiKeyVisible;
+            input.type = apiKeyVisible ? 'text' : 'password';
+        }
+
+        // Copy to Clipboard
+        function copyToClipboard() {
+            const input = document.getElementById('apiKeyDisplay');
+            input.select();
+            document.execCommand('copy');
+            alert('✅ تم نسخ المفتاح!');
+        }
+
+        // Generate New API Key
+        function generateNewKey() {
+            const newKey = 'sk_' + Math.random().toString(36).substring(2, 15);
+            document.getElementById('apiKeyDisplay').value = newKey;
+            alert('✨ تم توليد مفتاح جديد: ' + newKey);
+        }
+
+        // Generate Content
+        async function generateContent() {
+            const type = document.getElementById('generationType').value;
+            const prompt = document.getElementById('promptInput').value;
+            const btn = document.getElementById('generateBtn');
+
+            if (!prompt.trim()) {
+                alert('⚠️ الرجاء إدخال وصف!');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ جاري التوليد...';
+
+            try {
+                const apiKey = document.getElementById('apiKeyDisplay').value;
+                const response = await fetch('/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: type === 'video' ? 'kling-v3-omni' : 'gemini-image-enhanced',
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('resultArea').classList.remove('hidden');
+                    document.getElementById('resultContent').innerHTML = `
+                        <strong>✅ نجح التوليد!</strong><br>
+                        <pre class="mt-2 text-xs">${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    document.getElementById('resultArea').classList.remove('hidden');
+                    document.getElementById('resultContent').innerHTML = `
+                        <strong>❌ خطأ:</strong> ${data.error?.message || 'حدث خطأ ما'}
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('resultArea').classList.remove('hidden');
+                document.getElementById('resultContent').innerHTML = `<strong>❌ خطأ:</strong> ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 توليد الآن';
+            }
+        }
+
+        // Load data on page load
+        window.addEventListener('load', loadUserData);
+    </script>
+</body>
+</html>
